@@ -13,10 +13,99 @@ st.set_page_config(
 )
 
 
+# =========================
+# 页面样式
+# =========================
+st.markdown(
+    """
+    <style>
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 3rem;
+        max-width: 1000px;
+    }
+
+    [data-testid="stSidebar"] {
+        background-color: #f7f8fb;
+        border-right: 1px solid #e5e7eb;
+    }
+
+    .main-title {
+        text-align: center;
+        font-size: 34px;
+        font-weight: 800;
+        margin-bottom: 4px;
+    }
+
+    .sub-title {
+        text-align: center;
+        color: #6b7280;
+        font-size: 15px;
+        margin-bottom: 18px;
+    }
+
+    .system-card {
+        background-color: #f7f9fc;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 14px 18px;
+        margin-bottom: 18px;
+        color: #374151;
+        font-size: 14px;
+    }
+
+    .side-title {
+        font-size: 22px;
+        font-weight: 800;
+        margin-bottom: 2px;
+    }
+
+    .side-subtitle {
+        color: #6b7280;
+        font-size: 13px;
+        margin-bottom: 12px;
+    }
+
+    .ability-box {
+        background-color: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 14px;
+        line-height: 1.7;
+    }
+
+    .chat-tip {
+        color: #6b7280;
+        font-size: 13px;
+        text-align: center;
+        margin-top: -5px;
+        margin-bottom: 15px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# =========================
+# Session 状态
+# =========================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "chat_id" not in st.session_state:
+    st.session_state.chat_id = 1
 
+
+def new_chat():
+    st.session_state.messages = []
+    st.session_state.chat_id += 1
+
+
+# =========================
+# 执行网络配置意图
+# =========================
 def execute_intent(user_text):
     lines = []
 
@@ -113,7 +202,7 @@ def execute_intent(user_text):
         lines.append("")
         lines.append("### 5. 执行报告")
         lines.append(
-            "系统已完成：自然语言配置意图解析 → 策略生成 → 冲突检测 → "
+            "系统已完成：自然语言配置意图解析 → 策略编排 → 冲突检测 → "
             "Ryu/OpenFlow 配置下发 → Mininet 验证命令生成。"
         )
 
@@ -129,7 +218,7 @@ def submit_intent(text):
         "content": text
     })
 
-    with st.spinner("智能体正在解析并执行网络配置意图..."):
+    with st.spinner("网络配置智能体正在解析并执行配置意图..."):
         reply = execute_intent(text)
 
     st.session_state.messages.append({
@@ -138,31 +227,41 @@ def submit_intent(text):
     })
 
 
+# =========================
+# 左侧侧栏
+# =========================
 with st.sidebar:
-    st.markdown("## ⚙️ 设置")
+    st.markdown('<div class="side-title">🌐 NetIntent-Shield</div>', unsafe_allow_html=True)
+    st.markdown('<div class="side-subtitle">AI-SDN 网络配置智能体</div>', unsafe_allow_html=True)
 
-    if st.button("🧹 清除对话历史", use_container_width=True):
-        st.session_state.messages = []
+    if st.button("➕ 开启新对话", use_container_width=True):
+        new_chat()
         st.rerun()
 
-    st.divider()
-
-    st.markdown("## 🧠 系统能力")
-    st.markdown("""
-- 自然语言网络配置意图理解
-- 主机级访问控制配置
-- 安全域策略编排
-- 最小权限策略自动生成
-- 策略冲突检测
-- Ryu / OpenFlow 配置下发
-- Mininet 闭环验证
-- 执行报告生成
-""")
+    st.caption("开启新对话会清空当前页面对话记录，但不会影响已经下发到网络中的配置。")
 
     st.divider()
 
-    st.markdown("## 🌐 当前拓扑")
+    st.markdown("### 🧠 能力说明")
+    st.markdown(
+        """
+        <div class="ability-box">
+        ✅ 自然语言网络配置意图理解<br>
+        ✅ 主机级访问控制配置<br>
+        ✅ 安全域策略编排<br>
+        ✅ 最小权限策略自动生成<br>
+        ✅ 策略冲突检测<br>
+        ✅ Ryu / OpenFlow 配置下发<br>
+        ✅ Mininet 闭环验证命令生成<br>
+        ✅ 执行报告输出
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
+    st.divider()
+
+    st.markdown("### 🌐 当前拓扑")
     st.code("""
 Ryu Controller
       |
@@ -178,7 +277,7 @@ h2 ----- s1 ----- s2 ----- h3
          h6
 """)
 
-    st.markdown("## 🖥️ 主机角色")
+    st.markdown("### 🖥️ 主机角色")
     st.markdown("""
 **h1**：正常用户，办公区  
 **h2**：异常主机 / 疑似攻击主机，办公区  
@@ -194,36 +293,37 @@ h2 ----- s1 ----- s2 ----- h3
 
     st.divider()
 
-    st.markdown("## 🚀 演示案例")
+    st.markdown("### 🚀 演示案例")
 
-    if st.button("案例1：服务器区保护策略", use_container_width=True):
+    if st.button("服务器区保护策略", use_container_width=True):
         submit_intent("配置服务器区保护策略")
         st.rerun()
 
-    if st.button("案例2：最小权限策略", use_container_width=True):
+    if st.button("最小权限策略", use_container_width=True):
         submit_intent("按照最小权限原则配置当前内网")
         st.rerun()
 
-    if st.button("案例3：管理安全区保护", use_container_width=True):
+    if st.button("管理安全区保护", use_container_width=True):
         submit_intent("保护管理安全区，禁止异常主机访问管理员主机和监控审计主机")
         st.rerun()
 
-    if st.button("案例4：普通用户数据库隔离", use_container_width=True):
+    if st.button("普通用户数据库隔离", use_container_width=True):
         submit_intent("普通用户只能访问 Web服务器，不能直接访问数据库")
         st.rerun()
 
-    if st.button("案例5：策略冲突检测", use_container_width=True):
+    if st.button("策略冲突检测", use_container_width=True):
         submit_intent("允许 h1 访问 Web服务器，同时禁止 h1 访问 Web服务器")
         st.rerun()
 
 
+# =========================
+# 主页面标题
+# =========================
 st.markdown(
     """
-    <div style="text-align:center; margin-top:20px; margin-bottom:15px;">
-        <h1>🌐 NetIntent-Shield 网络配置智能体</h1>
-        <p style="color:gray; font-size:16px;">
-        基于 LangChain 智能体、Ryu SDN 控制器与 Mininet 的网络配置意图编排与闭环验证系统
-        </p >
+    <div class="main-title">🌐 NetIntent-Shield 网络配置智能体</div>
+    <div class="sub-title">
+    基于 LangChain 智能体、Ryu SDN 控制器与 Mininet 的网络配置意图编排与闭环验证系统
     </div>
     """,
     unsafe_allow_html=True
@@ -231,23 +331,20 @@ st.markdown(
 
 st.markdown(
     """
-    <div style="
-        background-color:#f7f9fc;
-        border:1px solid #e5e7eb;
-        padding:14px 18px;
-        border-radius:14px;
-        margin-bottom:18px;">
-        <b>系统定位：</b>
-        面向企业内网场景，支持访问控制、安全域策略、自动化策略编排、
-        策略冲突检测、配置下发与验证。
+    <div class="system-card">
+    <b>系统定位：</b>
+    面向企业内网场景，支持访问控制、安全域策略、自动化策略编排、
+    策略冲突检测、配置下发与验证。用户可以像对话一样输入网络配置意图，
+    系统自动生成并下发 SDN/OpenFlow 配置。
     </div>
     """,
     unsafe_allow_html=True
 )
 
-st.divider()
 
-
+# =========================
+# 对话区
+# =========================
 if not st.session_state.messages:
     with st.chat_message("assistant"):
         st.markdown("""
@@ -266,12 +363,14 @@ if not st.session_state.messages:
 **意图理解 → 策略编排 → 冲突检测 → Ryu/OpenFlow 下发 → Mininet 验证命令生成**
 """)
 
-
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
 
+# =========================
+# 底部聊天输入框
+# =========================
 prompt = st.chat_input("请输入您的网络配置意图...")
 
 if prompt:
