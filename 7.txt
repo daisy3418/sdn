@@ -1,0 +1,19 @@
+from agent.llm_agent import agent_parse_intent
+
+
+tests = [
+    "隔离异常主机 h2，禁止它访问 Web服务器和数据库服务器",
+    "禁止普通用户直接访问数据库服务器",
+    "允许管理员主机访问服务器区",
+    "禁止异常主机访问监控审计主机",
+]
+
+for text in tests:
+    print("User intent:")
+    print(text)
+
+    rules = agent_parse_intent(text)
+
+    print("LLM parsed rules:")
+    print(rules)
+    print("-" * 50)
