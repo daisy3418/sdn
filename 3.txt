@@ -1,0 +1,102 @@
+HOSTS = {
+    "h1": {
+        "ip": "10.0.1.1",
+        "role": "正常用户",
+        "area": "办公区",
+        "edge_switch": "s1",
+        "dpid": 1
+    },
+    "h2": {
+        "ip": "10.0.1.2",
+        "role": "异常主机 / 疑似攻击主机",
+        "area": "办公区",
+        "edge_switch": "s1",
+        "dpid": 1
+    },
+    "h3": {
+        "ip": "10.0.2.3",
+        "role": "Web服务器 / 业务服务器",
+        "area": "服务器区",
+        "edge_switch": "s2",
+        "dpid": 2
+    },
+    "h4": {
+        "ip": "10.0.2.4",
+        "role": "数据库服务器",
+        "area": "服务器区",
+        "edge_switch": "s2",
+        "dpid": 2
+    },
+    "h5": {
+        "ip": "10.0.3.5",
+        "role": "管理员主机",
+        "area": "管理安全区",
+        "edge_switch": "s3",
+        "dpid": 3
+    },
+    "h6": {
+        "ip": "10.0.3.6",
+        "role": "监控审计主机",
+        "area": "管理安全区",
+        "edge_switch": "s3",
+        "dpid": 3
+    }
+}
+
+
+SWITCHES = {
+    "s1": {
+        "dpid": 1,
+        "role": "办公网核心交换机"
+    },
+    "s2": {
+        "dpid": 2,
+        "role": "服务器区交换机"
+    },
+    "s3": {
+        "dpid": 3,
+        "role": "管理安全区交换机"
+    }
+}
+
+
+LINKS = [
+    ("h1", "s1"),
+    ("h2", "s1"),
+    ("s1", "s2"),
+    ("s2", "h3"),
+    ("s2", "h4"),
+    ("s1", "s3"),
+    ("s3", "h5"),
+    ("s3", "h6"),
+]
+
+
+def get_host_ip(host):
+    if host not in HOSTS:
+        raise ValueError("unknown host: " + host)
+    return HOSTS[host]["ip"]
+
+
+def get_host_dpid(host):
+    if host not in HOSTS:
+        raise ValueError("unknown host: " + host)
+    return HOSTS[host]["dpid"]
+
+
+def get_topology_text():
+    lines = []
+    lines.append("当前网络拓扑：")
+    lines.append("h1、h2 位于办公区，接入 s1。")
+    lines.append("h3、h4 位于服务器区，接入 s2。")
+    lines.append("h5、h6 位于管理安全区，接入 s3。")
+    lines.append("s1 与 s2、s3 相连，Ryu 控制器统一管理 s1、s2、s3。")
+    lines.append("")
+    lines.append("主机角色：")
+
+    for host, info in HOSTS.items():
+        lines.append(
+            host + " = " + info["role"] + "，IP = " + info["ip"] + "，接入交换机 = " + info["edge_switch"]
+        )
+
+    return "\n".join(lines)
