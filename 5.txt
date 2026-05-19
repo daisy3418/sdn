@@ -1,0 +1,37 @@
+from config.topology_config import get_host_ip, get_host_dpid
+from sdn.ryu_api import add_drop_flow
+
+
+def apply_rule(src, dst, action):
+    src_ip = get_host_ip(src)
+    dst_ip = get_host_ip(dst)
+    dpid = get_host_dpid(src)
+
+    if action == "deny":
+        status = add_drop_flow(
+            src_ip=src_ip,
+            dst_ip=dst_ip,
+            dpid=dpid
+        )
+        return {
+            "src": src,
+            "dst": dst,
+            "action": action,
+            "src_ip": src_ip,
+            "dst_ip": dst_ip,
+            "dpid": dpid,
+            "status": status
+        }
+
+    if action == "allow":
+        return {
+            "src": src,
+            "dst": dst,
+            "action": action,
+            "src_ip": src_ip,
+            "dst_ip": dst_ip,
+            "dpid": dpid,
+            "status": "skip"
+        }
+
+    raise ValueError("unknown action: " + action)
