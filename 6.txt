@@ -1,0 +1,133 @@
+import os
+import json
+from langchain_openai import ChatOpenAI
+from config.topology_config import HOSTS, SWITCHES, get_topology_text
+
+
+def build_prompt(user_text):
+    host_names = ", ".join(HOSTS.keys())
+
+    host_lines = []
+    for host, info in HOSTS.items():
+        host_lines.append(
+            f"- {host}: {info['role']}，区域={info['area']}，IP={info['ip']}，接入交换机={info['edge_switch']}"
+        )
+
+    switch_lines = []
+    for sw, info in SWITCHES.items():
+        switch_lines.append(
+            f"- {sw}: {info['role']}，dpid={info['dpid']}"
+        )
+
+    prompt = f"""
+你是一个面向 SDN 的网络配置意图智能体。
+
+你管理的是一个由 Mininet 模拟、Ryu 控制器控制的企业内网。
+
+当前拓扑信息如下：
+{get_topology_text()}
+
+主机信息：
+{chr(10).join(host_lines)}
+
+交换机信息：
+{chr(10).join(switch_lines)}
+
+你需要把用户的自然语言网络配置意图转换成 JSON 策略规则。
+
+支持的配置动作：
+- deny：禁止访问 / 阻断流量
+- allow：允许访问
+
+输出要求：
+1. 只能输出 JSON，不要解释。
+2. JSON 必须是列表。
+3. 每条规则必须包含 src、dst、action。
+4. src 和 dst 必须是这些主机之一：{host_names}
+5. action 只能是 deny 或 allow。
+6. 如果用户表达的是隔离某主机访问多个目标，需要生成多条 deny 规则。
+7. 如果用户意图中同时包含允许和禁止，不要自行合并，要保留两条规则，让冲突检测模块处理。
+8. 如果用户说“服务器区”，通常指 h3 和 h4。
+9. 如果用户说“Web服务器、业务服务器”，指 h3。
+10. 如果用户说“数据库、数据库服务器”，指 h4。
+11. 如果用户说“管理员、管理员主机”，指 h5。
+12. 如果用户说“监控主机、审计主机、监控审计主机”，指 h6。
+13. 如果用户说“正常用户、普通用户”，指 h1。
+14. 如果用户说“异常主机、攻击主机、可疑主机”，指 h2。
+
+示例1：
+用户意图：
+隔离异常主机 h2，禁止它访问 Web服务器和数据库服务器
+
+输出：
+[
+  {{"src": "h2", "dst": "h3", "action": "deny"}},
+  {{"src": "h2", "dst": "h4", "action": "deny"}}
+]
+
+示例2：
+用户意图：
+禁止普通用户直接访问数据库服务器
+
+输出：
+[
+  {{"src": "h1", "dst": "h4", "action": "deny"}}
+]
+
+示例3：
+用户意图：
+允许管理员主机访问服务器区
+
+输出：
+[
+  {{"src": "h5", "dst": "h3", "action": "allow"}},
+  {{"src": "h5", "dst": "h4", "action": "allow"}}
+]
+
+示例4：
+用户意图：
+禁止异常主机访问监控审计主机
+
+输出：
+[
+  {{"src": "h2", "dst": "h6", "action": "deny"}}
+]
+
+示例5：
+用户意图：
+允许 h1 访问 Web服务器，同时禁止 h1 访问 Web服务器
+
+输出：
+[
+  {{"src": "h1", "dst": "h3", "action": "allow"}},
+  {{"src": "h1", "dst": "h3", "action": "deny"}}
+]
+
+用户意图：
+{user_text}
+"""
+    return prompt
+
+
+def agent_parse_intent(user_text):
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+
+    if not api_key:
+        raise ValueError("DEEPSEEK_API_KEY is not set")
+
+    llm = ChatOpenAI(
+        model="deepseek-chat",
+        temperature=0,
+        api_key=api_key,
+        base_url="https://api.deepseek.com"
+    )
+
+    prompt = build_prompt(user_text)
+    response = llm.invoke(prompt)
+    content = response.content.strip()
+
+    if content.startswith("```"):
+        content = content.replace("```json", "").replace("```", "").strip()
+
+    rules = json.loads(content)
+    return rules
