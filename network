@@ -1,0 +1,212 @@
+from agent.llm_agent import agent_parse_intent
+from agent.simple_parser import parse_intent
+from sdn.conflict_checker import check_conflicts
+from sdn.policy_apply import apply_rule
+
+
+def classify_task(user_text):
+    text = user_text.lower()
+
+    rollback_words = ["回滚", "撤销", "恢复", "清空", "还原"]
+    verify_words = ["验证", "测试", "检查是否生效", "怎么验证", "如何验证"]
+
+    security_words = [
+        "攻击者", "被攻陷", "被控制", "hr", "h2", "内网入侵",
+        "安全加固", "横向移动", "扫描", "隔离", "微隔离",
+        "服务器区", "管理安全区", "管理员主机", "监控审计主机",
+        "最小权限", "保护", "阻断", "禁止", "允许",
+        "访问", "数据库", "web", "web服务器"
+    ]
+
+    for w in rollback_words:
+        if w in text:
+            return "rollback"
+
+    for w in verify_words:
+        if w in text:
+            return "verify"
+
+    for w in security_words:
+        if w in text:
+            return "security_reinforcement"
+
+    return "invalid"
+
+
+def build_event_recognition(user_text, rules):
+    text = user_text.lower()
+
+    if "h2" in text or "hr" in text or "攻击者" in text or "被攻陷" in text or "被控制" in text:
+        return "检测到办公区 HR 主机 h2 疑似被攻击者控制，h2 被识别为当前安全事件中的被攻陷主机。"
+
+    if rules:
+        return "系统已根据用户输入识别到网络安全加固需求，并生成对应访问控制策略。"
+
+    return "未识别到明确的安全事件。"
+
+
+def build_risk_analysis(rules):
+    targets = set()
+
+    for rule in rules:
+        if rule.get("src") == "h2" and rule.get("action") == "deny":
+            targets.add(rule.get("dst"))
+
+    risks = []
+
+    if "h3" in targets or "h4" in targets:
+        risks.append("h2 可能横向访问服务器区，威胁 Web服务器 h3 和数据库服务器 h4。")
+
+    if "h5" in targets or "h6" in targets:
+        risks.append("h2 可能横向访问管理安全区，威胁管理员主机 h5 和监控审计主机 h6。")
+
+    if risks:
+        return risks
+
+    return ["当前策略主要用于访问控制或业务保留，未发现明显横向移动风险描述。"]
+
+
+def build_reinforcement_suggestions(rules):
+    suggestions = []
+
+    for rule in rules:
+        src = rule.get("src")
+        dst = rule.get("dst")
+        action = rule.get("action")
+
+        if src == "h2" and action == "deny":
+            suggestions.append("对被攻陷主机 h2 实施主机级微隔离，阻断其访问 {}。".format(dst))
+
+        if action == "allow":
+            suggestions.append("保留 {} 到 {} 的正常业务访问关系。".format(src, dst))
+
+    if not suggestions:
+        suggestions.append("未生成明确加固建议。")
+
+    suggestions.append("注意：本系统隔离的是被攻陷主机 h2，不是隔离整个办公区交换机 s2。")
+
+    return suggestions
+
+
+def build_verification_from_rules(rules):
+    verification = []
+
+    for rule in rules:
+        src = rule.get("src")
+        dst = rule.get("dst")
+        action = rule.get("action")
+
+        if action == "deny":
+            verification.append({
+                "cmd": "{} ping -c 3 {}".format(src, dst),
+                "expected": "fail"
+            })
+
+        elif action == "allow":
+            verification.append({
+                "cmd": "{} ping -c 3 {}".format(src, dst),
+                "expected": "success"
+            })
+
+    return verification
+
+
+def run_network_agent(user_text):
+    task_type = classify_task(user_text)
+
+    if task_type == "invalid":
+        return {
+            "task_type": "invalid",
+            "summary": "我没有识别到有效的内网安全加固意图。请描述攻击主机、保护目标或访问控制需求。",
+            "event_recognition": "未识别到明确安全事件。",
+            "risk_analysis": [],
+            "suggestions": [],
+            "rules": [],
+            "conflicts": [],
+            "apply_results": [],
+            "verification": []
+        }
+
+    if task_type == "verify":
+        return {
+            "task_type": "verify",
+            "summary": "这是验证类请求。请根据最近一次加固策略，在 Mininet 中执行对应 ping 命令进行验证。",
+            "event_recognition": "用户请求验证安全加固效果。",
+            "risk_analysis": [],
+            "suggestions": ["查看最近一次策略中的 deny 与 allow 规则，并执行对应 ping 测试。"],
+            "rules": [],
+            "conflicts": [],
+            "apply_results": [],
+            "verification": []
+        }
+
+    if task_type == "rollback":
+        return {
+            "task_type": "rollback",
+            "summary": "这是回滚类请求。当前版本已识别回滚意图，但建议后续接入 Ryu 流表清理接口实现自动回滚。",
+            "event_recognition": "用户请求撤销或恢复网络配置。",
+            "risk_analysis": [],
+            "suggestions": ["后续可通过清理 OpenFlow 流表恢复默认连通性。"],
+            "rules": [],
+            "conflicts": [],
+            "apply_results": [],
+            "verification": []
+        }
+
+    try:
+        try:
+            rules = agent_parse_intent(user_text)
+            parser_name = "LangChain / DeepSeek 安全加固智能体"
+        except Exception:
+            rules = parse_intent(user_text)
+            parser_name = "本地兜底安全策略解析器"
+
+        event_recognition = build_event_recognition(user_text, rules)
+        risk_analysis = build_risk_analysis(rules)
+        suggestions = build_reinforcement_suggestions(rules)
+
+        conflicts = check_conflicts(rules)
+
+        apply_results = []
+
+        if not conflicts:
+            for rule in rules:
+                result = apply_rule(
+                    rule["src"],
+                    rule["dst"],
+                    rule["action"]
+                )
+                apply_results.append(result)
+
+        verification = build_verification_from_rules(rules)
+
+        if conflicts:
+            summary = "智能体已生成安全加固策略，但检测到策略冲突，因此拒绝下发。"
+        else:
+            summary = "智能体已完成安全事件识别、风险分析、策略编排、冲突检测和 Ryu/OpenFlow 下发。"
+
+        return {
+            "task_type": "security_reinforcement",
+            "parser": parser_name,
+            "summary": summary,
+            "event_recognition": event_recognition,
+            "risk_analysis": risk_analysis,
+            "suggestions": suggestions,
+            "rules": rules,
+            "conflicts": conflicts,
+            "apply_results": apply_results,
+            "verification": verification
+        }
+
+    except Exception as e:
+        return {
+            "task_type": "error",
+            "summary": "系统执行失败：" + str(e),
+            "event_recognition": "执行过程中发生错误。",
+            "risk_analysis": [],
+            "suggestions": [],
+            "rules": [],
+            "conflicts": [],
+            "apply_results": [],
+            "verification": []
+        }
