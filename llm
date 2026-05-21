@@ -1,0 +1,154 @@
+import os
+import json
+from langchain_openai import ChatOpenAI
+from config.topology_config import HOSTS, SWITCHES, get_topology_text
+
+
+def build_prompt(user_text):
+    host_names = ", ".join(HOSTS.keys())
+
+    host_lines = []
+    for host, info in HOSTS.items():
+        host_lines.append(
+            f"- {host}: {info['role']}，区域={info['area']}，IP={info['ip']}，接入交换机={info['edge_switch']}"
+        )
+
+    switch_lines = []
+    for sw, info in SWITCHES.items():
+        switch_lines.append(
+            f"- {sw}: {info['role']}，dpid={info['dpid']}"
+        )
+
+    prompt = f"""
+你是一个面向企业内网入侵场景的 AI-SDN 安全加固智能体。
+
+你的任务不是普通聊天，也不是简单关键词匹配。
+你需要根据用户描述的安全事件、当前网络拓扑和安全域关系，
+自动生成主机级微隔离策略，用于阻断攻击者横向移动。
+
+当前拓扑信息如下：
+{get_topology_text()}
+
+主机信息：
+{chr(10).join(host_lines)}
+
+交换机信息：
+{chr(10).join(switch_lines)}
+
+系统支持的配置动作：
+- deny：禁止访问 / 阻断流量
+- allow：允许访问 / 业务保留
+
+输出要求：
+1. 只能输出 JSON，不要解释。
+2. JSON 必须是列表。
+3. 每条规则必须包含 src、dst、action。
+4. src 和 dst 必须是这些主机之一：{host_names}
+5. action 只能是 deny 或 allow。
+6. 如果用户表达的是复合安全事件，需要拆分成多条规则。
+7. 如果同一访问关系同时存在允许和禁止，不要自行合并，保留冲突，让冲突检测模块处理。
+8. 如果用户提到攻击者进入内网、HR 主机被攻陷、h2 异常、h2 被控制，默认认为 h2 是被攻陷主机。
+9. 对被攻陷主机应进行主机级微隔离，不要隔离整个办公区交换机。
+10. 保护服务器区时，应保护 h3 Web服务器和 h4 数据库服务器。
+11. 保护管理安全区时，应保护 h5 管理员主机和 h6 监控审计主机。
+12. 保证正常业务连续性时，应保留 h1 到 h3 的访问，以及 h5 到 h3、h4 的访问。
+
+安全事件理解规则：
+1. “HR 主机被攻陷”“h2 被攻击者控制”“攻击者进入内网”“疑似控制 h2”都表示 h2 是攻击源。
+2. “横向移动”通常表示 h2 尝试访问服务器区和管理安全区。
+3. “保护服务器区”表示阻断 h2 到 h3、h4。
+4. “保护管理安全区”表示阻断 h2 到 h5、h6。
+5. “不要影响正常用户”表示保留 h1 到 h3。
+6. “不要影响管理员业务”表示保留 h5 到 h3、h4。
+7. “最小权限安全加固”表示阻断 h2 到 h3、h4、h5、h6，同时保留 h1 到 h3、h5 到 h3/h4。
+
+示例1：
+用户意图：
+HR 主机 h2 被攻击者控制，请进行内网安全加固，保护服务器区和管理安全区，同时不要影响正常用户和管理员业务。
+
+输出：
+[
+  {{"src": "h2", "dst": "h3", "action": "deny"}},
+  {{"src": "h2", "dst": "h4", "action": "deny"}},
+  {{"src": "h2", "dst": "h5", "action": "deny"}},
+  {{"src": "h2", "dst": "h6", "action": "deny"}},
+  {{"src": "h1", "dst": "h3", "action": "allow"}},
+  {{"src": "h5", "dst": "h3", "action": "allow"}},
+  {{"src": "h5", "dst": "h4", "action": "allow"}}
+]
+
+示例2：
+用户意图：
+发现 h2 正在扫描服务器区，请阻断其横向移动。
+
+输出：
+[
+  {{"src": "h2", "dst": "h3", "action": "deny"}},
+  {{"src": "h2", "dst": "h4", "action": "deny"}}
+]
+
+示例3：
+用户意图：
+攻击者疑似控制 h2，请禁止其访问管理员主机和监控审计主机。
+
+输出：
+[
+  {{"src": "h2", "dst": "h5", "action": "deny"}},
+  {{"src": "h2", "dst": "h6", "action": "deny"}}
+]
+
+示例4：
+用户意图：
+按照最小权限原则对当前企业内网进行安全加固。
+
+输出：
+[
+  {{"src": "h2", "dst": "h3", "action": "deny"}},
+  {{"src": "h2", "dst": "h4", "action": "deny"}},
+  {{"src": "h2", "dst": "h5", "action": "deny"}},
+  {{"src": "h2", "dst": "h6", "action": "deny"}},
+  {{"src": "h1", "dst": "h3", "action": "allow"}},
+  {{"src": "h5", "dst": "h3", "action": "allow"}},
+  {{"src": "h5", "dst": "h4", "action": "allow"}}
+]
+
+示例5：
+用户意图：
+允许 h2 访问数据库服务器，同时禁止 h2 访问数据库服务器。
+
+输出：
+[
+  {{"src": "h2", "dst": "h4", "action": "allow"}},
+  {{"src": "h2", "dst": "h4", "action": "deny"}}
+]
+
+现在请处理下面的用户安全事件或网络加固意图。
+
+用户意图：
+{user_text}
+"""
+    return prompt
+
+
+def agent_parse_intent(user_text):
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+
+    if not api_key:
+        raise ValueError("DEEPSEEK_API_KEY is not set")
+
+    llm = ChatOpenAI(
+        model="deepseek-chat",
+        temperature=0,
+        api_key=api_key,
+        base_url="https://api.deepseek.com"
+    )
+
+    prompt = build_prompt(user_text)
+    response = llm.invoke(prompt)
+    content = response.content.strip()
+
+    if content.startswith("```"):
+        content = content.replace("```json", "").replace("```", "").strip()
+
+    rules = json.loads(content)
+    return rules
