@@ -1,0 +1,127 @@
+HOSTS = {
+    "h1": {
+        "ip": "10.0.1.1",
+        "role": "正常办公用户",
+        "area": "办公区",
+        "edge_switch": "s2",
+        "dpid": 2
+    },
+    "h2": {
+        "ip": "10.0.1.2",
+        "role": "HR 被攻陷主机 / 攻击者控制主机",
+        "area": "办公区",
+        "edge_switch": "s2",
+        "dpid": 2
+    },
+    "h3": {
+        "ip": "10.0.2.3",
+        "role": "Web服务器 / 业务服务器",
+        "area": "服务器区",
+        "edge_switch": "s3",
+        "dpid": 3
+    },
+    "h4": {
+        "ip": "10.0.2.4",
+        "role": "数据库服务器",
+        "area": "服务器区",
+        "edge_switch": "s3",
+        "dpid": 3
+    },
+    "h5": {
+        "ip": "10.0.3.5",
+        "role": "管理员主机",
+        "area": "管理安全区",
+        "edge_switch": "s4",
+        "dpid": 4
+    },
+    "h6": {
+        "ip": "10.0.3.6",
+        "role": "监控审计主机",
+        "area": "管理安全区",
+        "edge_switch": "s4",
+        "dpid": 4
+    }
+}
+
+
+SWITCHES = {
+    "s1": {
+        "dpid": 1,
+        "role": "核心交换机 / 汇聚交换机"
+    },
+    "s2": {
+        "dpid": 2,
+        "role": "办公区交换机"
+    },
+    "s3": {
+        "dpid": 3,
+        "role": "服务器区交换机"
+    },
+    "s4": {
+        "dpid": 4,
+        "role": "管理安全区交换机"
+    }
+}
+
+
+LINKS = [
+    ("s1", "s2"),
+    ("s1", "s3"),
+    ("s1", "s4"),
+    ("s2", "h1"),
+    ("s2", "h2"),
+    ("s3", "h3"),
+    ("s3", "h4"),
+    ("s4", "h5"),
+    ("s4", "h6"),
+]
+
+
+def get_host_ip(host):
+    if host not in HOSTS:
+        raise ValueError("unknown host: " + host)
+    return HOSTS[host]["ip"]
+
+
+def get_host_dpid(host):
+    if host not in HOSTS:
+        raise ValueError("unknown host: " + host)
+    return HOSTS[host]["dpid"]
+
+
+def get_host_role(host):
+    if host not in HOSTS:
+        raise ValueError("unknown host: " + host)
+    return HOSTS[host]["role"]
+
+
+def get_host_area(host):
+    if host not in HOSTS:
+        raise ValueError("unknown host: " + host)
+    return HOSTS[host]["area"]
+
+
+def get_topology_text():
+    lines = []
+    lines.append("当前企业内网拓扑：")
+    lines.append("s1 是核心交换机，连接办公区、服务器区和管理安全区。")
+    lines.append("s2 是办公区交换机，连接 h1 正常办公用户和 h2 HR 被攻陷主机。")
+    lines.append("s3 是服务器区交换机，连接 h3 Web服务器和 h4 数据库服务器。")
+    lines.append("s4 是管理安全区交换机，连接 h5 管理员主机和 h6 监控审计主机。")
+    lines.append("")
+    lines.append("重要安全事件背景：")
+    lines.append("h2 是 HR 被攻陷主机，攻击者可能从 h2 横向移动到服务器区和管理安全区。")
+    lines.append("系统应对 h2 实施主机级微隔离，而不是隔离整个办公区交换机 s2。")
+    lines.append("")
+    lines.append("主机角色：")
+
+    for host, info in HOSTS.items():
+        lines.append(
+            host + " = " + info["role"] +
+            "，区域 = " + info["area"] +
+            "，IP = " + info["ip"] +
+            "，接入交换机 = " + info["edge_switch"] +
+            "，dpid = " + str(info["dpid"])
+        )
+
+    return "\n".join(lines)
