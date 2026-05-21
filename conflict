@@ -1,0 +1,25 @@
+def check_conflicts(rules):
+    pair_actions = {}
+    conflicts = []
+
+    for rule in rules:
+        src = rule.get("src")
+        dst = rule.get("dst")
+        action = rule.get("action")
+
+        key = (src, dst)
+
+        if key not in pair_actions:
+            pair_actions[key] = set()
+
+        pair_actions[key].add(action)
+
+    for key, actions in pair_actions.items():
+        if "allow" in actions and "deny" in actions:
+            conflicts.append({
+                "src": key[0],
+                "dst": key[1],
+                "actions": list(actions)
+            })
+
+    return conflicts
